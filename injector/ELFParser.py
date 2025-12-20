@@ -8,26 +8,19 @@ class ELFParser :
 
     def __init__(self, BinaryPath : str):
         
-
         if not os.path.isfile(BinaryPath) : 
             raise FileNotFoundError('No such a file directory')
         
         self.BinaryPath = BinaryPath
-        
         try:
-            with open(BinaryPath, "rb") as f:
-                self.elffile = ELFFile(f)
+            self._file = open(BinaryPath, "rb")
+            self.elffile = ELFFile(self._file)
         except Exception as e:
             raise ValueError(f"Failed to parse ELF file: {e}")
         
-    
-    def _human_type(self, etype):
-        return ENUM_E_TYPE.get(etype, f"Unknown ({etype})")
-
-    def _human_machine(self, machine):
-        return ENUM_E_MACHINE.get(machine, f"Unknown ({machine})")
 
     def getHeader(self):
+        
         h = self.elffile.header                  
         e_ident = h['e_ident']
         print(" ELF Header :")
@@ -49,7 +42,44 @@ class ELFParser :
         print(f"    Section header table entry size     : {h['e_shentsize']} bytes")
         print(f"    Section header table entry count    : {h['e_shnum']} ")
         print(f"    Section header table entry index    : {h['e_shstrndx']}")
+        print(f"    Number of sections in the file      : {self.elffile.num_sections()}")
 
+    def getSectionHeaderInformations(self, section: str):
+        
+        if not isinstance(section, str):
+            raise TypeError("section name must be a string")
+        
+        if section[0]!='.' : section = f".{section}"
 
+        sec = self.elffile.get_section_by_name(section)
+
+        if sec is None:
+            raise ValueError(f"Section not found: {section}")
+
+        header = {
+            "name": sec.name,
+            "type": sec["sh_type"],
+            "flags": sec["sh_flags"],
+            "addr": sec["sh_addr"],
+            "offset": sec["sh_offset"],
+            "size": sec["sh_size"],
+            "link": sec["sh_link"],
+            "info": sec["sh_info"],
+            "addralign": sec["sh_addralign"],
+            "entsize": sec["sh_entsize"],
+        }
+        
+        print(f"\n{section} Section Header: ")
+        for key, value in header.items():
+            if isinstance(value, int):
+                print(f"    {key:<12}    : 0x{value:x}")
+            else:
+                print(f"    {key:<12}    : {value}")
+
+    
+    def close(self) :
+        if self._file :
+            self._file.close()
+            self._file = None
 
 
