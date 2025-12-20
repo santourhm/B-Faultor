@@ -45,7 +45,7 @@ class ELFParser :
         print(f"    Number of sections in the file      : {self.elffile.num_sections()}")
 
     def getSectionHeaderInformations(self, section: str):
-        
+
         if not isinstance(section, str):
             raise TypeError("section name must be a string")
         
@@ -69,14 +69,16 @@ class ELFParser :
             "entsize": sec["sh_entsize"],
         }
         
-        print(f"\n{section} Section Header: ")
-        for key, value in header.items():
+        return header
+
+    def _print_dic(self, dic : dict) :
+
+        for key, value in dic.items():
             if isinstance(value, int):
                 print(f"    {key:<12}    : 0x{value:x}")
             else:
-                print(f"    {key:<12}    : {value}")
+                print(f"    {key:<12}    : {value}") 
 
-    
     def close(self) :
         if self._file :
             self._file.close()
