@@ -1,8 +1,11 @@
 from elftools.elf.elffile import ELFFile
+from elftools.elf.elffile import Section
 from elftools.elf.constants import E_FLAGS, SH_FLAGS
 from elftools.elf.enums import ENUM_E_TYPE, ENUM_E_MACHINE
+from capstone import *
 import os
 
+STT_FUNC = 'STT_FUNC'
 
 class ELFParser :
 
@@ -46,6 +49,10 @@ class ELFParser :
 
     def getSectionHeaderInformations(self, section: str):
 
+        """
+        gets the header section information for a given @section 
+        """
+
         if not isinstance(section, str):
             raise TypeError("section name must be a string")
         
@@ -78,6 +85,140 @@ class ELFParser :
                 print(f"    {key:<12}    : 0x{value:x}")
             else:
                 print(f"    {key:<12}    : {value}") 
+
+
+    def _findFunction(self,functionName) :
+
+        """
+        makes sure that a given function name exits 
+
+        """
+        symtab = self.elffile.get_section_by_name('.symtab')
+        
+        if symtab is None :
+            raise ModuleNotFoundError(' .symtab section not found')
+        
+    
+        for symbol in symtab.iter_symbols():
+            name = symbol.name 
+
+            if name == functionName and symbol.entry['st_info']['type'] == STT_FUNC:
+                return symbol
+
+        return None
+
+    def getFunctionInformation(self, functionName : str) -> dict : 
+        
+        """
+        list the informations about a given function like the virtual address and the name of bytes
+        of the function
+        """
+        symbol = self._findFunction(functionName)
+
+        if not  symbol :
+            raise ModuleNotFoundError(f'{functionName} No such a function') 
+                
+        infos = {
+                "SectionIndx" : symbol['st_shndx'],
+                "SymbolAddr" : symbol['st_value'],
+                "SizeBytes"      : symbol['st_size']
+        }
+        
+        return infos 
+
+    def _getFunctionBytes(self, functionName) :
+        
+        """return the bytes of a given name function"""
+
+        text_sec= self.getSectionHeaderInformations('.text')
+        functionInfo = self.getFunctionInformation(functionName)
+
+        text_addr_in_file = text_sec["offset"] - 1
+        text_size = text_sec["size"]
+        text_addr_vrt = text_sec["addr"]
+        function_vrt_addr = functionInfo['SymbolAddr']
+        function_size = functionInfo["SizeBytes"]
+        function_addr_in_file =  text_addr_in_file + (function_vrt_addr - text_addr_vrt)
+
+        if function_addr_in_file < text_addr_in_file or  function_addr_in_file >  text_size + text_addr_in_file  :
+            raise ValueError(f"Function '{functionName}' not found or is not a function symbol")
+
+        self._file.seek(function_addr_in_file)
+        return self._file.read(function_size)
+    
+    def _disasm_function(self, functionName: str):
+        """
+        disassemble a Thumb function from Cortex-M ELF.
+        """
+        code_bytes = self._getFunctionBytes(functionName)
+        func_info = self.getFunctionInformation(functionName)
+        vaddr = func_info['SymbolAddr']        
+        size = func_info['SizeBytes']
+
+        if vaddr == 0:
+            raise ValueError(f"{functionName} has address 0 ")
+
+        md = Cs(CS_ARCH_ARM, CS_MODE_THUMB + CS_MODE_V8)
+        md.detail = False
+
+        print(f"\n{'='*60}")
+        print(f"{functionName} @ 0x{vaddr:08x}  ({size} bytes)")
+        print(f"{'Address':<10} {'Bytes':<12} {'Instruction':<30}")
+        print('-' * 60)
+
+        consumed = 0
+        for inst in md.disasm(code_bytes, vaddr):
+            bytes_hex = " ".join(f"{b:02x}" for b in inst.bytes)
+            print(f"0x{inst.address:08x}:  {bytes_hex:<12}  {inst.mnemonic} {inst.op_str}")
+            consumed += inst.size
+
+        if consumed < len(code_bytes):
+            print(f"[!] {len(code_bytes) - consumed} trailing bytes (padding?):")
+            tail = code_bytes[consumed:]
+            hex_tail = tail.hex()
+            for i in range(0, len(hex_tail), 32):
+                print(" " * 20 + hex_tail[i:i+32])
+
+    def replace_instruction_in_func(self, functionName: str, replacement: dict, index ):
+        
+        code_bytes = self._getFunctionBytes(functionName)
+        func_info = self.getFunctionInformation(functionName)
+        vaddr = func_info['SymbolAddr']        
+        size = func_info['SizeBytes']
+        text_sec= self.getSectionHeaderInformations('.text')
+        text_addr_vrt = text_sec["addr"]        
+        text_addr_in_file = text_sec["offset"] - 1
+        paddr =  text_addr_in_file + (vaddr - text_addr_vrt)
+        
+        if vaddr == 0:
+            raise ValueError(f"{functionName} has address 0 ")
+
+        md = Cs(CS_ARCH_ARM, CS_MODE_THUMB + CS_MODE_V8)
+        md.detail = False
+
+        if self._file.closed or 'b+' not in self._file.mode:
+                self._file.close()
+                self._file = open(self.BinaryPath, 'rb+')
+        
+        current_index = 0
+        current_byte_offset = 0
+        for inst in md.disasm(code_bytes, vaddr):
+            if current_index == index:   
+                repl_inst = replacement[inst.size]
+                if repl_inst is None : 
+                    raise ValueError(f"No replacement defined for {inst.size}-byte instruction")
+                if len(repl_inst) != inst.size:
+                    raise ValueError(f"Replacement size mismatch: need {inst.size}, got {len(repl_inst)}")
+        
+
+                self._file.seek(paddr + current_byte_offset)
+                self._file.write(repl_inst)
+                self._file.flush()
+                return True
+            current_index+=1
+            current_byte_offset+= inst.size
+
+        raise IndexError(f"Instruction index {index} out of range in {functionName}")
 
     def close(self) :
         if self._file :
