@@ -116,7 +116,7 @@ class ELFParser :
         symbol = self._findFunction(functionName)
 
         if not  symbol :
-            raise ModuleNotFoundError(f'{functionName} No such a function') 
+            raise ModuleNotFoundError(f'"{functionName}" does not exists ') 
                 
         infos = {
                 "SectionIndx" : symbol['st_shndx'],
@@ -126,9 +126,9 @@ class ELFParser :
         
         return infos 
 
-    def _getFunctionBytes(self, functionName) :
+    def _getFunction(self, functionName) -> dict :
         
-        """return the bytes of a given name function"""
+        """return the dic centaining bytes of a given name function, vritual address and actual address of the function"""
 
         text_sec= self.getSectionHeaderInformations('.text')
         functionInfo = self.getFunctionInformation(functionName)
@@ -144,13 +144,20 @@ class ELFParser :
             raise ValueError(f"Function '{functionName}' not found or is not a function symbol")
 
         self._file.seek(function_addr_in_file)
-        return self._file.read(function_size)
+
+        final = {
+                'code' : self._file.read(function_size),    # code of the function in row bytes
+                'faddr' : function_addr_in_file,            # address of the function in the file
+                'vaddr' : function_vrt_addr                 # virtual address of the function 
+        }
+
+        return final
     
     def _disasm_function(self, functionName: str):
         """
         disassemble a Thumb function from Cortex-M ELF.
         """
-        code_bytes = self._getFunctionBytes(functionName)
+        code_bytes = self._getFunction(functionName)
         func_info = self.getFunctionInformation(functionName)
         vaddr = func_info['SymbolAddr']        
         size = func_info['SizeBytes']
@@ -178,18 +185,28 @@ class ELFParser :
             hex_tail = tail.hex()
             for i in range(0, len(hex_tail), 32):
                 print(" " * 20 + hex_tail[i:i+32])
+        
+    def _coutNumberOfInstruction(self, funcName :str ) :
 
-    def replace_instruction_in_func(self, functionName: str, replacement: dict, index ):
+        func = self._getFunction(funcName)
+        md = Cs(CS_ARCH_ARM, CS_MODE_THUMB + CS_MODE_V8)
+        md.detail = False
+        nmInst =  0
+        for _ in md.disasm(func['code'], func['vaddr']):
+            nmInst+=1
         
-        code_bytes = self._getFunctionBytes(functionName)
-        func_info = self.getFunctionInformation(functionName)
-        vaddr = func_info['SymbolAddr']        
-        size = func_info['SizeBytes']
-        text_sec= self.getSectionHeaderInformations('.text')
-        text_addr_vrt = text_sec["addr"]        
-        text_addr_in_file = text_sec["offset"] - 1
-        paddr =  text_addr_in_file + (vaddr - text_addr_vrt)
-        
+        return nmInst
+
+    def replaceInstructionInFunc(self, functionName: str, replacement: dict, index ):
+        """
+        for a given dict {size : instruction} we try to inject the instruction at @index in the given function
+        we raise an error at any failure  
+        """
+        func = self._getFunction(functionName)
+        code_bytes = func['code']
+        paddr = func['faddr']
+        vaddr = func['vaddr']
+
         if vaddr == 0:
             raise ValueError(f"{functionName} has address 0 ")
 
@@ -214,6 +231,7 @@ class ELFParser :
                 self._file.seek(paddr + current_byte_offset)
                 self._file.write(repl_inst)
                 self._file.flush()
+                self._file.seek(0)
                 return True
             current_index+=1
             current_byte_offset+= inst.size
