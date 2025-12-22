@@ -203,12 +203,19 @@ class ELFParser :
         we raise an error at any failure  
         """
         func = self._getFunction(functionName)
+        self.replaceInstructionInFuncByCode(func,replacement,index)
+    
+    def replaceInstructionInFuncByCode(self, func : dict , replacement: dict, index ):
+        """
+        for a given dict {size : instruction} we try to inject the instruction at @index in the given function
+        we raise an error at any failure  
+        """
         code_bytes = func['code']
         paddr = func['faddr']
         vaddr = func['vaddr']
 
         if vaddr == 0:
-            raise ValueError(f"{functionName} has address 0 ")
+            raise ValueError(f"virtual address is 0")
 
         md = Cs(CS_ARCH_ARM, CS_MODE_THUMB + CS_MODE_V8)
         md.detail = False
@@ -236,7 +243,8 @@ class ELFParser :
             current_index+=1
             current_byte_offset+= inst.size
 
-        raise IndexError(f"Instruction index {index} out of range in {functionName}")
+        raise IndexError(f"Instruction index {index} out of range ")
+
 
     def close(self) :
         if self._file :

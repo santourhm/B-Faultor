@@ -31,6 +31,7 @@ class FaultInjector :
 
         indices = list(range(nmInst))
 
+        func = self.elf._getFunction(funName)
         fault_sets = list(itertools.combinations(indices, N))
         for i, fault_set in enumerate(fault_sets):
             dst = dst_dir / f"{i}_{src.name}"
@@ -38,7 +39,7 @@ class FaultInjector :
     
             for idx in fault_set:
                 faulted_elf = ELFParser(dst)
-                faulted_elf.replaceInstructionInFunc(funName,NOPS,idx)
+                faulted_elf.replaceInstructionInFuncByCode(func,NOPS,idx)
             faulted_elf.close()    
 
 
