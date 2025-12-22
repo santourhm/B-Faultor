@@ -87,10 +87,10 @@ class ELFParser :
                 print(f"    {key:<12}    : {value}") 
 
 
-    def _findFunction(self,functionName) :
+    def _findSymbol(self,symbol_n) :
 
         """
-        makes sure that a given function name exits 
+        makes sure that a given symbol name exits 
 
         """
         symtab = self.elffile.get_section_by_name('.symtab')
@@ -98,11 +98,10 @@ class ELFParser :
         if symtab is None :
             raise ModuleNotFoundError(' .symtab section not found')
         
-    
         for symbol in symtab.iter_symbols():
             name = symbol.name 
 
-            if name == functionName and symbol.entry['st_info']['type'] == STT_FUNC:
+            if name == symbol_n :
                 return symbol
 
         return None
@@ -113,11 +112,14 @@ class ELFParser :
         list the informations about a given function like the virtual address and the name of bytes
         of the function
         """
-        symbol = self._findFunction(functionName)
+        symbol = self._findSymbol(functionName)
 
         if not  symbol :
             raise ModuleNotFoundError(f'"{functionName}" does not exists ') 
-                
+        
+        if  symbol.entry['st_info']['type'] != STT_FUNC :
+            raise ValueError(f'{functionName} is not a function')
+
         infos = {
                 "SectionIndx" : symbol['st_shndx'],
                 "SymbolAddr" : symbol['st_value'],

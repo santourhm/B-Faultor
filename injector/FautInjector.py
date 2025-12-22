@@ -41,7 +41,20 @@ class FaultInjector :
                 faulted_elf = ELFParser(dst)
                 faulted_elf.replaceInstructionInFuncByCode(func,NOPS,idx)
             faulted_elf.close()    
+    
+    def BitFlipInSymbol(self, symbol : str, section : str, idx : int, bitIndex : int) :
+        """
+        for a symbol in a specifc section (eg, .rodata), we flip a bit  at the address 
+        @symbol + idx , the index of the bit to flip is specifed at @bitIndex
+        """
 
+        symbl = self._findSymbol(symbol)
+
+        if not symbol : 
+            raise ValueError(f'{symbol} not found')
+        
+        """ if not symbol.entry['st_info'] 
+        sec = self.elf.elffile.get_section_by_name(section) """
 
 
        
