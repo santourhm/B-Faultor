@@ -16,7 +16,7 @@ class ELFParser :
         
         self.BinaryPath = BinaryPath
         try:
-            self._file = open(BinaryPath, "rb")
+            self._file = open(BinaryPath, "rb+")
             self.elffile = ELFFile(self._file)
         except Exception as e:
             raise ValueError(f"Failed to parse ELF file: {e}")
@@ -247,6 +247,14 @@ class ELFParser :
 
         raise IndexError(f"Instruction index {index} out of range ")
 
+    def getSectionByIndex(self, idx: int):
+        if idx == 0:
+            raise ValueError("SHN_UNDEF: symbol is not bound to a section")
+
+        if idx < 0 or idx >= len(self.section_headers):
+            raise IndexError(f"invalid section index {idx}")
+
+        return self.elffile.section_headers[idx]
 
     def close(self) :
         if self._file :
