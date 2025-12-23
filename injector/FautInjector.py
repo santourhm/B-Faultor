@@ -17,7 +17,7 @@ class FaultInjector :
         self.elf = elf
         self.dst = 'faulted'
         
-    def InjectSkipInstruction(self, funName: str, N : int):
+    def InjectInstructionOverAll(self, funName: str, inst : dict ,N : int):
         
         src = Path(self.elf.BinaryPath)
         dst_dir = Path(self.dst)
@@ -39,22 +39,60 @@ class FaultInjector :
     
             for idx in fault_set:
                 faulted_elf = ELFParser(dst)
-                faulted_elf.replaceInstructionInFuncByCode(func,NOPS,idx)
+                faulted_elf.replaceInstructionInFuncByCode(func,inst,idx)
             faulted_elf.close()    
     
-    def BitFlipInSymbol(self, symbol : str, section : str, idx : int, bitIndex : int) :
+    def BitFlipInSymbol(self, symbol: str, idx: int, bitIndex: int):
         """
-        for a symbol in a specifc section (eg, .rodata), we flip a bit  at the address 
-        @symbol + idx , the index of the bit to flip is specifed at @bitIndex
+        Flip one bit at (symbol + idx), bit position bitIndex (0..7)
         """
 
-        symbl = self._findSymbol(symbol)
+        symbl = self.elf._findSymbol(symbol)
+        if not symbl:
+            raise ValueError(f"symbol '{symbol}' not found")
 
-        if not symbol : 
-            raise ValueError(f'{symbol} not found')
+        if symbl['st_info']['type'] != 'STT_OBJECT':
+            raise ValueError(f"symbol '{symbol}' is not an object")
+
+        size_sym = symbl['st_size']
+        if idx < 0 or idx >= size_sym:
+            raise IndexError(f"index {idx} outside symbol '{symbol}'")
+
+        if bitIndex < 0 or bitIndex > 7:
+            raise ValueError("bitIndex must be in [0, 7]")
+
+        sec_idx = symbl['st_shndx']
+        sec = self.elf.elffile.get_section(sec_idx)
+
+        file = self.elf._file
+        print(f'name :{sec['sh_name']}')
+        file_offset = (
+            sec['sh_offset']
+            + (symbl['st_value'] - sec['sh_addr'])
+            + idx
+        )
+
+        file.seek(file_offset)
+        old_byte = file.read(1)
+        if len(old_byte) != 1:
+            raise IOError("failed to read byte")
+
+        old_val = old_byte[0]
+
+        new_val = old_val ^ (1 << bitIndex)
         
-        """ if not symbol.entry['st_info'] 
-        sec = self.elf.elffile.get_section_by_name(section) """
+        file.seek(file_offset)
+        file.write(bytes([new_val]))
+
+        """file.seek(file_offset)
+        data = file.read(10) 
+        print(" ".join(f"{b:02x}" for b in data))"""
+        print(
+            f"0x{old_val:02x} -> 0x{new_val:02x} "
+            f"(bit {bitIndex} flipped)"
+        )
+
+
 
 
        
