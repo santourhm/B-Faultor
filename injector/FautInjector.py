@@ -65,7 +65,7 @@ class FaultInjector :
         sec = self.elf.elffile.get_section(sec_idx)
 
         file = self.elf._file
-        print(f'name :{sec['sh_name']}')
+        #print(f'name :{sec['sh_name']}')
         file_offset = (
             sec['sh_offset']
             + (symbl['st_value'] - sec['sh_addr'])
