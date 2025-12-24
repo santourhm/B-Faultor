@@ -92,6 +92,20 @@ class FaultInjector :
             f"(bit {bitIndex} flipped)"
         )
 
+    def InjectInstructionAtIndex(self, funName: str, inst : dict ,idx : int):
+        
+        src = Path(self.elf.BinaryPath)
+        dst_dir = Path(self.dst)
+        dst_dir.mkdir(parents=True, exist_ok=True)
+
+        dst = dst_dir / f"{idx}_{src.name}"
+        shutil.copyfile(src, dst)
+    
+        func = self.elf._getFunction(funName)
+        _elf = ELFParser(dst)
+        _elf.replaceInstructionInFuncByCode(func,inst,idx)
+        _elf.close()    
+
 
 
 
